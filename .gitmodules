@@ -4,3 +4,27 @@
 [submodule "ts-gen"]
 	path = ts-gen
 	url = https://github.com/wasm-bindgen/ts-gen
+[submodule "tokio"]
+	path = tokio
+	url = git@github.com:tokio-rs/tokio
+[submodule "libc"]
+	path = libc
+	url = git@github.com:rust-lang/libc
+[submodule "sys-info-rs"]
+	path = sys-info-rs
+	url = git@github.com:FillZpp/sys-info-rs
+[submodule "arboard"]
+	path = arboard
+	url = git@github.com:1Password/arboard
+[submodule "tree-sitter"]
+	path = tree-sitter
+	url = git@github.com:tree-sitter/tree-sitter
+[submodule "sys-info"]
+	path = sys-info
+	url = git@github.com:guybedford/sys-info-rs
+[submodule "fs2-rs"]
+	path = fs2-rs
+	url = git@github.com:danburkert/fs2-rs
+[submodule "ring"]
+	path = ring
+	url = git@github.com:briansmith/ring

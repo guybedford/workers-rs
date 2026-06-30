@@ -16,6 +16,11 @@ exclude = [
     "wasm-bindgen",
     "wasm-streams",
     "generated",
+    "tokio",
+    "arboard",
+    "libc",
+    "sys-info",
+    "tree-sitter"
 ]
 resolver = "2"
 
@@ -105,3 +110,25 @@ opt-level = "z"
 
 # These are local patches we use to test against local wasm bindgen
 # We always align on the exact stable wasm bindgen version for releases
+[patch.crates-io]
+js-sys = { version = "0.3.98", path = './wasm-bindgen/crates/js-sys' }
+wasm-bindgen = { version = "0.2.121", path = './wasm-bindgen' }
+wasm-bindgen-cli-support = { version = "0.2.121", path = "./wasm-bindgen/crates/cli-support" }
+wasm-bindgen-futures = { version = "0.4.71", path = './wasm-bindgen/crates/futures' }
+wasm-bindgen-macro-support = { version = "0.2.121", path = "./wasm-bindgen/crates/macro-support" }
+wasm-bindgen-shared = { version = "0.2.121", path = "./wasm-bindgen/crates/shared" }
+wasm-bindgen-test = { version = "0.3.71", path = "./wasm-bindgen/crates/test" }
+web-sys = { version = "0.3.98", path = './wasm-bindgen/crates/web-sys' }
+arboard.path = "./arboard"
+fs2.path = "./fs2-rs"
+libc.path = "./libc"
+socket2.git = "https://github.com/rust-lang/socket2"
+sys-info.path = "./sys-info"
+ring.path = "./ring"
+tokio-macros.path = "./tokio/tokio-macros"
+tokio.path = "./tokio/tokio"
+# Emscripten has a full libc, so tree-sitter must not compile its libc-less
+# wasm shims (stdio/stdlib/...) — they duplicate `fwrite` et al. These local
+# checkouts carry that build.rs fix. (0.26-compatible, matching goose's req.)
+tree-sitter.path = "../tree-sitter"
+tree-sitter-language.path = "../tree-sitter-language"

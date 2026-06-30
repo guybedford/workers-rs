@@ -1,0 +1,62 @@
+[package]
+name = "emscripten-goose"
+version = "0.1.0"
+edition = "2021"
+
+[package.metadata.release]
+release = false
+
+# A bin crate: rustc drives emcc as the linker, and `-sWASM_BINDGEN=auto`
+# makes emcc run wasm-bindgen as a post-link step (detected via the marker
+# section). The whole build is a single `cargo build`.
+[[bin]]
+name = "emscripten-goose"
+path = "src/main.rs"
+
+[dependencies]
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+web-sys = { workspace = true }
+# Reflect, to read the worker `env` bindings (OPENROUTER_API_KEY etc.) off the
+# JS object the runtime passes to `fetch`.
+js-sys.workspace = true
+# Tokio against the in-progress emscripten support in ../tokio (workspace
+# patch).
+#
+# `net` is what gates `AsyncFd`/`Interest`. The branch's emscripten support
+# keeps mio's refs inert under emscripten (it uses its own reactor backed by
+# `emscripten_async_call`), so enabling `net` no longer trips mio's wasm
+# `compile_error!`. We still avoid `features = ["full"]` to keep the
+# feature surface (and code size) minimal.
+tokio = { version = "1", default-features = false, features = [
+    "rt",
+    "macros",
+    "sync",
+    "time",
+    "net",
+] }
+libc = "0.2"
+# Bog-standard goose-as-a-library smoke test on wasm32-unknown-emscripten.
+goose = { git = "https://github.com/aaif-goose/goose" }
+# `ModelConfig` lives here; the `goose` facade no longer re-exports it.
+goose-providers = { git = "https://github.com/aaif-goose/goose" }
+anyhow = "1"
+futures = "0.3"
+# goose pulls sqlx but only turns on its async runtime via its TLS features;
+# enable `runtime-tokio` directly so feature unification satisfies sqlx's
+# "runtime must be enabled" check without dragging in the TLS/crypto stack.
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio"] }
+# TLS for goose's reqwest client. We steer reqwest onto rustls *without* a
+# baked-in provider (`rustls-no-provider`); reqwest's `rustls` feature would
+# force aws-lc-rs (C/CMake, intractable on emscripten). The crypto backend is
+# ring, whose C core builds for wasm32-emscripten via its no-asm fallback path
+# (plus a one-line patch enabling its getrandom-backed SystemRandom). We then
+# install the ring CryptoProvider as the process default at runtime.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+webpki-root-certs = "1"
+
+[profile.release]
+# Tell rustc to optimize for small code size; emcc further optimizes at
+# link time via wasm-opt.
+opt-level = "s"
