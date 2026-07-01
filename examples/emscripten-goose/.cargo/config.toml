@@ -32,4 +32,11 @@ rustflags = [
     "-Clink-arg=-sSOURCE_PHASE_IMPORTS",
     "-Clink-arg=-sENVIRONMENT=node",
     "-Clink-arg=-sNODERAWSOCKETS",
+    # With ASSERTIONS on (the -O0 default), emscripten's shell.js skips the
+    # single-environment fast path and instead auto-detects at runtime, then
+    # asserts. workerd exposes `WorkerGlobalScope`, so it's misdetected as a
+    # `worker` env and aborts despite `-sENVIRONMENT=node`. Disabling assertions
+    # takes the `ENVIRONMENT.length == 1 && !ASSERTIONS` path, hardcoding
+    # ENVIRONMENT_IS_NODE = true (and IS_WORKER = false).
+    "-Clink-arg=-sASSERTIONS=0",
 ]
