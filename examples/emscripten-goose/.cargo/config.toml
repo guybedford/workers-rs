@@ -39,4 +39,9 @@ rustflags = [
     # takes the `ENVIRONMENT.length == 1 && !ASSERTIONS` path, hardcoding
     # ENVIRONMENT_IS_NODE = true (and IS_WORKER = false).
     "-Clink-arg=-sASSERTIONS=0",
+    # emscripten's default 64KB stack overflows building regex-automata's
+    # meta DFA (deep recursion, large debug frames) — it faults as an OOB
+    # memory access. Give it room, and let the heap grow for reqwest/goose.
+    "-Clink-arg=-sSTACK_SIZE=8MB",
+    "-Clink-arg=-sALLOW_MEMORY_GROWTH=1",
 ]
