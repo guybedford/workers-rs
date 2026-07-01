@@ -128,7 +128,8 @@ ring.path = "./ring"
 tokio-macros.path = "./tokio/tokio-macros"
 tokio.path = "./tokio/tokio"
 # Emscripten has a full libc, so tree-sitter must not compile its libc-less
-# wasm shims (stdio/stdlib/...) — they duplicate `fwrite` et al. These local
-# checkouts carry that build.rs fix. (0.26-compatible, matching goose's req.)
-tree-sitter.path = "../tree-sitter"
-tree-sitter-language.path = "../tree-sitter-language"
+# wasm shims (stdio/stdlib/...) — they duplicate `fwrite` et al. The local
+# `tree-sitter` submodule (emscripten branch, v0.26.9 base — matching goose's
+# req.) carries that build.rs fix.
+tree-sitter.path = "./tree-sitter/lib"
+tree-sitter-language.path = "./tree-sitter/crates/language"
