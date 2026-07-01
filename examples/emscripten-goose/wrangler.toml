@@ -18,14 +18,26 @@ OPENROUTER_API_KEY = "sk-or-v1-..."
 
 # rustc drives emcc as the linker; `-sWASM_BINDGEN=auto` makes emcc run
 # wasm-bindgen as a post-link step (detected via the marker section), so the
-# whole build is a single `cargo build`. The env wires up the local patch chain:
-#   * PATH:      the emscripten checkout + the locally-built wasm-bindgen CLI
-#                (carries the descriptor-interpreter fixes and the
-#                `#[wasm_bindgen(tokio)]` support this example relies on; build
-#                it once with:
-#                  cargo build -p wasm-bindgen-cli --bin wasm-bindgen \
-#                    --manifest-path ../../wasm-bindgen/Cargo.toml)
-#   * EM_CONFIG: emsdk's .emscripten config
+# whole build is a single `cargo build`.
+#
+# Portable across machines via two env vars (no hardcoded paths):
+#   * EMSDK      -> your emsdk root (provides the LLVM/clang toolchain, node,
+#                   binaryen, and the `.emscripten` config).
+#   * EMSCRIPTEN -> the patched emscripten checkout (provides `emcc` + the
+#                   epoll/async-DNS/WASM_BINDGEN support this example needs).
+# Everything else is derived:
+#   * EM_LLVM_ROOT/LLVM_ROOT are pinned to emsdk's clang so emcc doesn't pick up
+#     a stray clang from PATH (e.g. Homebrew's) — the portability gotcha.
+#   * the wasm-bindgen CLI is found relative to this dir (build it once with
+#     `cargo build -p wasm-bindgen-cli --bin wasm-bindgen \
+#        --manifest-path ../../wasm-bindgen/Cargo.toml`).
 # Requires `rustup target add wasm32-unknown-emscripten`.
 [build]
-command = "EMCC_CFLAGS='-fwasm-exceptions' EM_CONFIG=/Users/gbedford/Projects/emsdk/.emscripten PATH=/Users/gbedford/Projects/emscripten:/Users/gbedford/Projects/workers-rs/wasm-bindgen/target/debug:$PATH cargo build"
+command = '''
+PATH="${EMSCRIPTEN:?set EMSCRIPTEN to your patched emscripten checkout}:$PWD/../../wasm-bindgen/target/debug:$PATH" \
+EM_CONFIG="${EMSDK:?set EMSDK to your emsdk root}/.emscripten" \
+EM_LLVM_ROOT="$EMSDK/upstream/bin" \
+LLVM_ROOT="$EMSDK/upstream/bin" \
+EMCC_CFLAGS='-fwasm-exceptions' \
+cargo build
+'''
