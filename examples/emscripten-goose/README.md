@@ -1,86 +1,120 @@
-# emscripten-goose
+# Emscripten Goose Example
 
-A Cloudflare Worker, written in Rust and compiled to
-`wasm32-unknown-emscripten`, that uses the [`goose`](https://github.com/aaif-goose/goose)
-LLM library to turn a prompt into a web page. The request's **query string is
-the prompt**; the worker asks an OpenAI-compatible model to emit an HTML
-document and serves it directly:
+[`goose`](https://github.com/aaif-goose/goose) running on `wasm32-unknown-emscripten`
+on Cloudflare Workers using AI Gateway.
 
-```
-GET /?a neon synthwave landing page for a coffee shop
-  -> 200 text/html  (the model's generated page)
-```
+## Setup Instructions with Patchset
 
-The point isn't the page — it's that the whole call chain runs on emscripten:
+1. Ensure latest Rust toolchain installed with Emscripten target via [Rustup]:
 
 ```
-goose -> reqwest -> hyper -> tokio::net::TcpStream
-         hostname resolution via tokio async DNS (emscripten_dns_lookup_async)
-         TLS via rustls + ring
+rustup install stable
+rustup default stable
+rustup target add wasm32-unknown-emscripten
 ```
 
-None of that works on `wasm32-unknown-unknown`. It works here because of the
-patch set below.
+2. Install Emscripten with patches
+
+```sh
+# Emsdk
+git clone https://github.com/emscripten-core/emsdk
+cd emsdk
+./emsdk install latest
+./emsdk activate latest
+
+# Emscripten Patchset
+git clone -b cf https://github.com/guybedford/emscripten
+( cd emscripten && npm install )
+```
+
+3. Clone & Build workers-rs with Submodule Patches
+
+```
+git clone --recurse-submodules -b emscripten https://github.com/guybedford/workers-rs
+cd workers-rs
+npm run build
+```
+
+4. Setup the API keys
+
+Edit `examples/emscripten-goose/wrangler.toml` and set:
+
+* `CLOUDFLARE_ACCOUNT_ID`: your Cloudflare account ID
+* `CLOUDFLARE_API_TOKEN`: your API token for Workers AI
+* `OPENAI_MODEL`: the model to use
+
+
+5. Run the example repo
+
+```
+cd examples/emscripten-goose
+npx wrangler@latest dev
+```
+
+Then navigate to `localhost:5776` once build completes.
+
+> Note WARP needs to be disabled currently for Cloudflare internal testing.
 
 ## Patch set
 
-This target is bleeding-edge: it depends on unreleased emscripten, a vendored
-`wasm-bindgen`, an in-progress tokio port, and a handful of small crate patches.
-The workspace `[patch.crates-io]` (repo-root `Cargo.toml`) wires them in. You
-need these checked out:
+Patches include:
 
 | Dependency | Location | Why |
 | --- | --- | --- |
-| **emscripten** | `/Users/gbedford/Projects/emscripten` (on `PATH`) | epoll + `emscripten_epoll_set_callback`, async DNS (`emscripten_dns_lookup_async`), and `-sWASM_BINDGEN`. npm deps bootstrapped. |
-| **emsdk** | `/Users/gbedford/Projects/emsdk` (`EM_CONFIG`) | LLVM/clang toolchain emcc drives. |
-| **wasm-bindgen** | `./wasm-bindgen` (submodule) | The `#[wasm_bindgen(tokio)]` attribute and the emscripten descriptor-interpreter fixes. Patched in for `wasm-bindgen`, `js-sys`, `web-sys`, `wasm-bindgen-futures`, `*-macro-support`, `*-cli-support`. |
-| **tokio** | `../tokio` | emscripten event-loop runtime (drives `#[wasm_bindgen(tokio)]` futures) + the async DNS resolver (`ToSocketAddrs`/`lookup_host` over `emscripten_dns_lookup_async`). |
+| **emscripten** | sibling checkout `../../../emscripten` (fork `guybedford/emscripten`, branch `cf`) | epoll + `emscripten_epoll_set_callback`, async DNS (`emscripten_dns_lookup_async`), and `-sWASM_BINDGEN`. |
+| **emsdk** | sibling checkout `../../../emsdk` | LLVM/clang toolchain emcc drives. |
+| **wasm-bindgen** | submodule `wasm-bindgen/` | The `#[wasm_bindgen(tokio)]` attribute and the emscripten descriptor-interpreter fixes (also `js-sys`, `web-sys`, `wasm-bindgen-futures`, `*-macro-support`, `*-cli-support`). |
+| **tokio** | submodule `tokio/` | emscripten event-loop runtime (drives `#[wasm_bindgen(tokio)]` futures) + async DNS resolver (`lookup_host` over `emscripten_dns_lookup_async`). |
 | **socket2** | git `rust-lang/socket2` | emscripten support, not yet released. |
-| **ring** | `../ring` | getrandom-backed `SystemRandom` on emscripten (the rustls crypto backend). |
-| **libc** | `../libc` | emscripten decls (`pthread_sigmask`/`sigwait`/`faccessat`). |
-| **sys-info, fs2, arboard, tree-sitter, tree-sitter-language** | `../*` | small emscripten build/stub fixes (pulled in transitively by goose). |
+| **ring** | submodule `ring/` | getrandom-backed `SystemRandom` on emscripten (the rustls crypto backend). |
+| **libc** | submodule `libc/` | emscripten decls (`pthread_sigmask`/`sigwait`/`faccessat`). |
+| **sys-info, fs2, arboard, tree-sitter** | submodules | small emscripten build/stub fixes (pulled in transitively by goose). |
 
-Paths above are machine-specific (the author's layout); adjust the `[patch]`
-entries and the `wrangler.toml` `EM_CONFIG`/`PATH` to your checkouts.
+The layout the build expects is three checkouts side by side:
 
-### One-time setup
-
-```sh
-# Rust target
-rustup target add wasm32-unknown-emscripten
-
-# Build the vendored wasm-bindgen CLI (carries the descriptor-interpreter fixes
-# and the #[wasm_bindgen(tokio)] support). emcc invokes `wasm-bindgen` from PATH.
-cargo build -p wasm-bindgen-cli --bin wasm-bindgen \
-  --manifest-path ../../wasm-bindgen/Cargo.toml
+```
+<parent>/
+  emsdk/
+  emscripten/
+  workers-rs/          <- run wrangler dev from examples/emscripten-goose
 ```
 
-> Hostname resolution also requires emscripten's `getaddrinfo` to answer from
-> a resolution cache that `emscripten_dns_lookup_async` populates: the worker
-> prewarms it with tokio's async DNS, then reqwest's synchronous `GaiResolver`
-> reads it. Without that cache, real-hostname `connect`s fail.
+`wrangler.toml`'s `[build]` defaults `EMSDK`/`EMSCRIPTEN` to `../../../emsdk`
+and `../../../emscripten` (relative to the example dir); export either to
+override for a different layout.
 
-## Configure the model (OpenRouter)
 
-The example defaults to [OpenRouter](https://openrouter.ai), which serves free
-models. Grab a free API key (no card required) and set it in `wrangler.toml`:
+## Configure the model (AI Gateway)
+
+The worker calls the AI Gateway OpenAI-compatible (`/compat`) endpoint. The base
+URL is derived from your account id and gateway name as
+`https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/compat`. Set these in
+`wrangler.toml` (`wrangler whoami` prints your account id):
 
 ```toml
 [vars]
-OPENAI_BASE_URL = "https://openrouter.ai/api"   # host up to (not incl.) /v1
-OPENAI_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
-OPENROUTER_API_KEY = "sk-or-..."
+CLOUDFLARE_ACCOUNT_ID = "your-account-id"
+CF_AIG_GATEWAY_ID = "your-gateway-name"
+OPENAI_MODEL = "workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+CLOUDFLARE_API_TOKEN = "..."   # token with Workers AI / AI Gateway access
 ```
 
-For real deployments use a secret instead of a var:
+For real deployments use a secret instead of an in-file var:
 
 ```sh
-wrangler secret put OPENROUTER_API_KEY
+wrangler secret put CLOUDFLARE_API_TOKEN
 ```
 
-Any OpenAI-compatible endpoint works — point `OPENAI_BASE_URL`/`OPENAI_MODEL`
-at Groq, Gemini's OpenAI-compat endpoint, a local server, etc. (`OPENAI_API_KEY`
-is accepted as a fallback to `OPENROUTER_API_KEY`.)
+`CLOUDFLARE_API_TOKEN` is sent as the bearer token. For Workers AI models
+(`workers-ai/@cf/...`) it authenticates you to Workers AI; for third-party
+models (`openai/gpt-4.1`, `anthropic/claude-sonnet-4-5`, …) the gateway forwards
+it to that provider, so it must be *that provider's* key. `OPENAI_API_KEY` is
+accepted as a fallback, and `OPENAI_BASE_URL` overrides the derived URL (give
+the host up to, not including, `chat/completions` — i.e. ending in `/compat`).
+
+> **WARP gotcha:** Cloudflare WARP intercepts `gateway.ai.cloudflare.com` and
+> the worker's `connect` fails with a network error. Disconnect WARP
+> (`warp-cli disconnect`) while running the example.
 
 ## Build & run
 
@@ -89,8 +123,9 @@ The build is a single `cargo build` — rustc drives emcc as the linker and
 `[build]` command is self-contained, so:
 
 ```sh
+cd workers-rs/examples/emscripten-goose
 npx wrangler dev      # builds, then serves locally
-# open http://localhost:8787/?a%20landing%20page%20for%20a%20bakery
+# open http://localhost:8787/
 ```
 
 To deploy:
@@ -104,7 +139,8 @@ npx wrangler deploy
 After a release build, `run.mjs` calls the worker's `fetch` directly:
 
 ```sh
-OPENROUTER_API_KEY=sk-or-... node run.mjs "a neon synthwave landing page" > page.html
+CLOUDFLARE_ACCOUNT_ID=... CF_AIG_GATEWAY_ID=... CLOUDFLARE_API_TOKEN=... \
+  node run.mjs "a neon synthwave landing page" > page.html
 ```
 
 ## How it works
@@ -112,10 +148,14 @@ OPENROUTER_API_KEY=sk-or-... node run.mjs "a neon synthwave landing page" > page
 - `#[wasm_bindgen(tokio)]` on `fetch` drives the returned future on tokio's
   emscripten event-loop runtime (cooperatively, via the host event loop — no
   thread blocking), bridging the outcome to the JS `Promise` the runtime awaits.
-- The query string is decoded and used as the prompt, prefixed to ask the model
-  for a complete HTML document; the reply is served as `text/html`.
-- Before the request, `dns_prewarm` resolves the API host through tokio's async
-  DNS to warm emscripten's resolution cache for reqwest's resolver.
+- Any path other than `/generate` serves the landing form; `/generate` reads the
+  `prompt` query param, prefixes it to ask the model for a complete HTML
+  document, and serves the reply as `text/html`. The system prompt requires
+  inline CSS and inline images (`data:`/SVG), and `max_tokens` is raised so
+  richer pages don't truncate. Streaming is disabled because Workers AI's compat
+  stream can emit a non-string `delta.content` that goose's parser rejects.
+- Before the request, `dns_prewarm` resolves the gateway host through tokio's
+  async DNS to warm emscripten's resolution cache for reqwest's resolver.
 - `-sNODERAWSOCKETS` backs the socket layer with node `net`/`dgram`;
   `-fwasm-exceptions` matches the `panic = "unwind"` build tokio's task harness
   relies on.

@@ -1,41 +1,22 @@
 name = "emscripten-goose"
 main = "../../target/wasm32-unknown-emscripten/debug/deps/emscripten_goose.js"
-# Recent enough that nodejs_compat auto-enables the node builtin modules the
-# emscripten glue imports (node:fs >= 2025-09-15, node:dgram >= 2026-01-29).
 compatibility_date = "2026-06-02"
-# NODERAWSOCKETS routes emcc's socket layer through node's `net`/`dgram`,
-# which workerd only exposes under the Node compat shim. The new module
-# registry gives the ESM module a real `import.meta.url`, which emscripten's
-# node bootstrap (`_scriptName`) needs to resolve its builtins.
 compatibility_flags = ["nodejs_compat", "new_module_registry", "no_handle_cross_request_promise_resolution"]
 
-# OpenRouter config (see README for a free API key). For real deployments
-# prefer `wrangler secret put OPENROUTER_API_KEY` over an in-file var.
 [vars]
-OPENAI_BASE_URL = "https://openrouter.ai/api"
-OPENAI_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
-OPENROUTER_API_KEY = "sk-or-v1-..."
+CLOUDFLARE_ACCOUNT_ID = "UPDATE ME"
+CF_AIG_GATEWAY_ID = "gateway"
+OPENAI_MODEL = "workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+# CLOUDFLARE_API_TOKEN is optional (omit for an unauthenticated gateway); for
+# real deployments prefer `wrangler secret put CLOUDFLARE_API_TOKEN`.
+# CLOUDFLARE_API_TOKEN = "UPDATE ME"
 
-# rustc drives emcc as the linker; `-sWASM_BINDGEN=auto` makes emcc run
-# wasm-bindgen as a post-link step (detected via the marker section), so the
-# whole build is a single `cargo build`.
-#
-# Portable across machines via two env vars (no hardcoded paths):
-#   * EMSDK      -> your emsdk root (provides the LLVM/clang toolchain, node,
-#                   binaryen, and the `.emscripten` config).
-#   * EMSCRIPTEN -> the patched emscripten checkout (provides `emcc` + the
-#                   epoll/async-DNS/WASM_BINDGEN support this example needs).
-# Everything else is derived:
-#   * EM_LLVM_ROOT/LLVM_ROOT are pinned to emsdk's clang so emcc doesn't pick up
-#     a stray clang from PATH (e.g. Homebrew's) — the portability gotcha.
-#   * the wasm-bindgen CLI is found relative to this dir (build it once with
-#     `cargo build -p wasm-bindgen-cli --bin wasm-bindgen \
-#        --manifest-path ../../wasm-bindgen/Cargo.toml`).
-# Requires `rustup target add wasm32-unknown-emscripten`.
 [build]
 command = '''
-PATH="${EMSCRIPTEN:?set EMSCRIPTEN to your patched emscripten checkout}:$PWD/../../wasm-bindgen/target/debug:$PATH" \
-EM_CONFIG="${EMSDK:?set EMSDK to your emsdk root}/.emscripten" \
+: "${EMSDK:=$PWD/../../../emsdk}"
+: "${EMSCRIPTEN:=$PWD/../../../emscripten}"
+PATH="$EMSCRIPTEN:$PWD/../../wasm-bindgen/target/debug:$PATH" \
+EM_CONFIG="$EMSDK/.emscripten" \
 EM_LLVM_ROOT="$EMSDK/upstream/bin" \
 LLVM_ROOT="$EMSDK/upstream/bin" \
 EMCC_CFLAGS='-fwasm-exceptions' \

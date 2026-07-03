@@ -1,8 +1,8 @@
 //! A Cloudflare Worker, written in Rust and compiled to
 //! `wasm32-unknown-emscripten`, that uses the [`goose`] LLM library to turn a
 //! prompt into a web page. The request's query string *is* the prompt; the
-//! worker asks an OpenAI-compatible model (OpenRouter by default) to emit an
-//! HTML document and serves the result directly.
+//! worker asks a model through Cloudflare's [AI Gateway] OpenAI-compatible REST
+//! API to emit an HTML document and serves the result directly.
 //!
 //! The point of the example is that this works at all on emscripten: the call
 //! goes goose -> reqwest -> hyper -> tokio `TcpStream`, with hostname resolution
@@ -10,10 +10,16 @@
 //! on `wasm32-unknown-unknown`.
 //!
 //! Configure via worker vars/secrets (see `wrangler.toml`):
-//!   * `OPENROUTER_API_KEY` (or `OPENAI_API_KEY`) — required for OpenRouter.
-//!   * `OPENAI_BASE_URL` — host up to (not including) `/v1`; default OpenRouter.
-//!   * `OPENAI_MODEL` — any model the endpoint serves; default a free one.
-
+//!   * `CLOUDFLARE_ACCOUNT_ID` — your account id.
+//!   * `CF_AIG_GATEWAY_ID` — the gateway name. The base URL is derived from
+//!     both as `https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/compat`.
+//!   * `OPENAI_MODEL` — a `provider/model` id (e.g. `openai/gpt-4.1`).
+//!   * `CLOUDFLARE_API_TOKEN` (or `OPENAI_API_KEY`) — optional bearer token;
+//!     omit it for an unauthenticated gateway.
+//!   * `OPENAI_BASE_URL` — optional full override (host up to, not including,
+//!     the `chat/completions` path — i.e. ending in `/compat`).
+//!
+//! [AI Gateway]: https://developers.cloudflare.com/ai-gateway/usage/rest-api/
 use wasm_bindgen::prelude::*;
 use web_sys::{Request, Response, ResponseInit};
 
@@ -21,15 +27,74 @@ use web_sys::{Request, Response, ResponseInit};
 // point is the `fetch` export below.
 fn main() {}
 
-// OpenRouter's base is given as the host up to (not including) `/v1`: goose's
-// `OpenAiProvider` joins its default `v1/chat/completions` path onto it.
-const DEFAULT_BASE_URL: &str = "https://openrouter.ai/api";
-const DEFAULT_MODEL: &str = "meta-llama/llama-3.3-70b-instruct:free";
+// The gateway compat base is the host up to (not including) `chat/completions`:
+// we point `OpenAiProvider` at it with a `chat/completions` base path, yielding
+// `.../compat/chat/completions`.
+const DEFAULT_MODEL: &str = "openai/gpt-4.1";
 const DEFAULT_PROMPT: &str = "a friendly hello-world landing page";
+// goose defaults to `v1/chat/completions`; the gateway compat endpoint already
+// has `/compat` in the base, so we drop the `v1` segment.
+const COMPAT_BASE_PATH: &str = "chat/completions";
+
+/// Build the AI Gateway OpenAI-compat base URL from an account id and gateway.
+fn gateway_compat_base_url(account_id: &str, gateway_id: &str) -> String {
+    format!("https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/compat")
+}
 
 const SYSTEM_PROMPT: &str = "You are a web page generator. Reply with a single, complete, \
-self-contained HTML document and nothing else: no commentary, no markdown code fences.";
+self-contained HTML document and nothing else: no commentary, no markdown code fences. \
+All CSS must be inline in a <style> tag (no external stylesheets or <link>s), and all images \
+must be inline as data: URIs or inline SVG — never reference external image URLs.";
 const PROMPT_PREFIX: &str = "Output an HTML file for the following request: ";
+
+// The landing page: a form that GETs `/generate?prompt=...`, which the worker
+// then turns into a generated page.
+const LANDING_PAGE: &str = r#"<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>goose web generator</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center;
+         font-family: system-ui, sans-serif; background:#0f172a; color:#e2e8f0; }
+  .card { width:min(90vw,34rem); padding:2rem; }
+  h1 { font-size:1.6rem; margin:0 0 1.25rem; }
+  form { display:flex; gap:.5rem; }
+  input { flex:1; padding:.8rem 1rem; border-radius:.6rem; border:1px solid #334155;
+          background:#1e293b; color:inherit; font-size:1rem; }
+  button { padding:.8rem 1.4rem; border:0; border-radius:.6rem; cursor:pointer;
+           background:#38bdf8; color:#0f172a; font-weight:600; font-size:1rem;
+           display:inline-flex; align-items:center; gap:.5rem; }
+  button:disabled { cursor:progress; opacity:.85; }
+  .spinner { width:1rem; height:1rem; border:2px solid #0f172a40; border-top-color:#0f172a;
+             border-radius:50%; animation:spin .7s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  p { color:#94a3b8; font-size:.875rem; margin-top:1rem; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Generate a web page</h1>
+    <form action="/generate" method="get">
+      <input name="prompt" placeholder="type a website to generate…" autofocus required>
+      <button type="submit">Generate</button>
+    </form>
+    <p>e.g. &ldquo;a neon synthwave landing page for a coffee shop&rdquo;</p>
+  </div>
+  <script>
+    const form = document.querySelector("form");
+    const btn = document.querySelector("button");
+    form.addEventListener("submit", () => {
+      document.querySelector("input").readOnly = true;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>Generating…';
+    });
+  </script>
+</body>
+</html>
+"#;
 
 #[wasm_bindgen(tokio, js_namespace = ["default"])]
 pub async fn fetch(request: Request, env: JsValue, _ctx: JsValue) -> Result<Response, JsValue> {
@@ -37,24 +102,46 @@ pub async fn fetch(request: Request, env: JsValue, _ctx: JsValue) -> Result<Resp
         web_sys::console::error_1(&format!("RUST PANIC: {info}").into());
     }));
 
-    let prompt = query_string(&request).unwrap_or_else(|| DEFAULT_PROMPT.to_string());
-    let base_url = env_string(&env, "OPENAI_BASE_URL").unwrap_or_else(|| DEFAULT_BASE_URL.into());
+    // Serve the landing form for everything except `/generate`.
+    if path_of(&request).as_deref() != Some("/generate") {
+        return respond(200, "text/html; charset=utf-8", LANDING_PAGE);
+    }
+
+    let prompt = query_param(&request, "prompt").unwrap_or_else(|| DEFAULT_PROMPT.to_string());
+    // `OPENAI_BASE_URL` is a full override (ending in `/compat`); otherwise
+    // derive it from the account id and gateway name.
+    let base_url = env_string(&env, "OPENAI_BASE_URL").or_else(|| {
+        let account_id = env_string(&env, "CLOUDFLARE_ACCOUNT_ID")?;
+        let gateway_id = env_string(&env, "CF_AIG_GATEWAY_ID")?;
+        Some(gateway_compat_base_url(&account_id, &gateway_id))
+    });
     let model = env_string(&env, "OPENAI_MODEL").unwrap_or_else(|| DEFAULT_MODEL.into());
     let api_key =
-        env_string(&env, "OPENROUTER_API_KEY").or_else(|| env_string(&env, "OPENAI_API_KEY"));
+        env_string(&env, "CLOUDFLARE_API_TOKEN").or_else(|| env_string(&env, "OPENAI_API_KEY"));
 
-    let (status, content_type, body) =
-        match generate_page(&base_url, &model, api_key.as_deref(), &prompt).await {
+    let (status, content_type, body) = match base_url {
+        Some(base_url) => match generate_page(&base_url, &model, api_key.as_deref(), &prompt).await {
             Ok(html) => (200, "text/html; charset=utf-8", html),
             Err(e) => (502, "text/plain; charset=utf-8", format!("error: {e}")),
-        };
+        },
+        None => (
+            500,
+            "text/plain; charset=utf-8",
+            "error: set CLOUDFLARE_ACCOUNT_ID + CF_AIG_GATEWAY_ID (or OPENAI_BASE_URL)".to_string(),
+        ),
+    };
 
+    respond(status, content_type, &body)
+}
+
+/// Build a `Response` with the given status, content type, and body.
+fn respond(status: u16, content_type: &str, body: &str) -> Result<Response, JsValue> {
     let init = ResponseInit::new();
     init.set_status(status);
     let headers = web_sys::Headers::new()?;
     headers.set("content-type", content_type)?;
     init.set_headers(&headers);
-    Response::new_with_opt_str_and_init(Some(&body), &init)
+    Response::new_with_opt_str_and_init(Some(body), &init)
 }
 
 /// Ask the model to render `prompt` as an HTML document and return it.
@@ -67,7 +154,7 @@ async fn generate_page(
     use goose::conversation::message::Message;
     use goose::providers::api_client::{ApiClient, AuthMethod};
     use goose::providers::base::Provider;
-    use goose::providers::openai::OpenAiProvider;
+    use goose::providers::openai::OpenAiProviderBuilder;
     use goose_providers::model::ModelConfig;
 
     ensure_ring_provider();
@@ -79,11 +166,26 @@ async fn generate_page(
         dns_prewarm(&host).await?;
     }
 
-    let auth = AuthMethod::BearerToken(api_key.unwrap_or_default().to_string());
+    // Send a bearer token when one is configured; an unauthenticated gateway
+    // needs no auth.
+    let auth = match api_key {
+        Some(key) => AuthMethod::BearerToken(key.to_string()),
+        None => AuthMethod::NoAuth,
+    };
     let client = ApiClient::new_with_tls(base_url.to_string(), auth, None)
         .map_err(|e| format!("ApiClient::new_with_tls: {e}"))?;
-    let model_cfg = ModelConfig::new(model);
-    let provider = OpenAiProvider::new(client);
+    // Without an explicit cap goose sends a 4096-token default, which truncates
+    // richer pages mid-document; give the model room to finish.
+    let model_cfg = ModelConfig::new(model).with_max_tokens(Some(16_384));
+    // The compat endpoint's path already includes `/compat`, so override
+    // goose's default `v1/chat/completions` base path. Streaming is disabled:
+    // Workers AI's compat stream can emit a non-string `delta.content` (e.g. an
+    // integer) that goose's streaming parser rejects; the non-streaming path
+    // returns a single clean JSON response.
+    let provider = OpenAiProviderBuilder::new(client)
+        .base_path(COMPAT_BASE_PATH)
+        .supports_streaming(false)
+        .build();
 
     let messages = [Message::user().with_text(format!("{PROMPT_PREFIX}{prompt}"))];
     let (reply, _usage) = provider
@@ -118,12 +220,28 @@ fn env_string(env: &JsValue, key: &str) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
-/// The request's query string, percent-decoded, used verbatim as the prompt.
-fn query_string(req: &Request) -> Option<String> {
+/// The request URL's path (e.g. `/generate`), without query or fragment.
+fn path_of(req: &Request) -> Option<String> {
+    let url = req.url();
+    let after_scheme = url.split_once("://").map(|(_, r)| r).unwrap_or(&url);
+    let path_and_rest = after_scheme.split_once('/').map(|(_, r)| r)?;
+    let path = path_and_rest.split(['?', '#']).next().unwrap_or("");
+    Some(format!("/{path}"))
+}
+
+/// Value of a query-string parameter (`?key=value&...`), percent-decoded.
+fn query_param(req: &Request, key: &str) -> Option<String> {
     let url = req.url();
     let (_, query) = url.split_once('?')?;
-    let decoded = percent_decode(query);
-    (!decoded.trim().is_empty()).then_some(decoded)
+    let query = query.split('#').next().unwrap_or(query);
+    for pair in query.split('&') {
+        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+        if percent_decode(k) == key {
+            let decoded = percent_decode(v);
+            return (!decoded.trim().is_empty()).then_some(decoded);
+        }
+    }
+    None
 }
 
 /// Minimal `application/x-www-form-urlencoded` decode (`+` -> space, `%XX`).
