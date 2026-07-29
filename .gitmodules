@@ -12,7 +12,7 @@
 [submodule "libc"]
 	path = libc
 	url = https://github.com/guybedford/libc
-	branch = libc-0.2-emscripten
+	branch = libc-0.2-emscripten-layering
 [submodule "sys-info-rs"]
 	path = sys-info-rs
 	url = https://github.com/FillZpp/sys-info-rs
