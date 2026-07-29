@@ -1,0 +1,16 @@
+name = "emscripten-tokio-min"
+main = "../../target/wasm32-unknown-emscripten/debug/deps/emscripten_tokio_min.js"
+compatibility_date = "2026-06-02"
+compatibility_flags = ["nodejs_compat", "new_module_registry", "no_handle_cross_request_promise_resolution"]
+
+# Portable build: set EMSDK (emsdk root) and EMSCRIPTEN (patched emscripten
+# checkout) in your environment; see examples/emscripten-goose for details.
+[build]
+command = '''
+PATH="${EMSCRIPTEN:?set EMSCRIPTEN to your patched emscripten checkout}:$PWD/../../wasm-bindgen/target/debug:$PATH" \
+EM_CONFIG="${EMSDK:?set EMSDK to your emsdk root}/.emscripten" \
+EM_LLVM_ROOT="$EMSDK/upstream/bin" \
+LLVM_ROOT="$EMSDK/upstream/bin" \
+EMCC_CFLAGS='-fwasm-exceptions' \
+cargo build
+'''

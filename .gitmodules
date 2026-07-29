@@ -1,30 +1,36 @@
 [submodule "wasm-bindgen"]
 	path = wasm-bindgen
-	url = https://github.com/wasm-bindgen/wasm-bindgen
+	url = https://github.com/guybedford/wasm-bindgen
+	branch = emscripten-tokio-attribute
 [submodule "ts-gen"]
 	path = ts-gen
 	url = https://github.com/wasm-bindgen/ts-gen
 [submodule "tokio"]
 	path = tokio
-	url = git@github.com:tokio-rs/tokio
+	url = https://github.com/guybedford/tokio
+	branch = emscripten-layering-minimal
 [submodule "libc"]
 	path = libc
-	url = git@github.com:rust-lang/libc
+	url = https://github.com/guybedford/libc
+	branch = libc-0.2-emscripten
 [submodule "sys-info-rs"]
 	path = sys-info-rs
-	url = git@github.com:FillZpp/sys-info-rs
+	url = https://github.com/FillZpp/sys-info-rs
 [submodule "arboard"]
 	path = arboard
-	url = git@github.com:1Password/arboard
+	url = https://github.com/guybedford/arboard
+	branch = emscripten
 [submodule "tree-sitter"]
 	path = tree-sitter
-	url = git@github.com:tree-sitter/tree-sitter
+	url = https://github.com/guybedford/tree-sitter
+	branch = emscripten-layering
 [submodule "sys-info"]
 	path = sys-info
-	url = git@github.com:guybedford/sys-info-rs
+	url = https://github.com/guybedford/sys-info-rs
 [submodule "fs2-rs"]
 	path = fs2-rs
-	url = git@github.com:danburkert/fs2-rs
+	url = https://github.com/danburkert/fs2-rs
 [submodule "ring"]
 	path = ring
-	url = git@github.com:briansmith/ring
+	url = https://github.com/guybedford/ring
+	branch = emscripten

@@ -1,0 +1,38 @@
+[package]
+name = "emscripten-tokio-min"
+version = "0.1.0"
+edition = "2021"
+
+[package.metadata.release]
+release = false
+
+# Minimal wasm-bindgen tokio worker: `fetch` sleeps then resolves DNS, no
+# goose/reqwest/rustls. Isolates the workerd runtime behaviour of the
+# `#[wasm_bindgen(tokio)]` schedule/drive bridge + epoll reactor.
+[[bin]]
+name = "emscripten-tokio-min"
+path = "src/main.rs"
+
+[dependencies]
+wasm-bindgen.workspace = true
+# `tokio`: the ambient hosted runtime the `#[wasm_bindgen(tokio)]` expansion
+# schedules onto.
+wasm-bindgen-futures = { workspace = true, features = ["tokio"] }
+web-sys = { workspace = true }
+js-sys.workspace = true
+tokio = { version = "1", default-features = false, features = [
+    "rt",
+    "macros",
+    "time",
+    "net",
+    "io-util",
+] }
+libc = "0.2"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+webpki-roots = "1"
+ring = "0.17"
+x509-parser = "0.16"
+
+[profile.release]
+opt-level = "s"

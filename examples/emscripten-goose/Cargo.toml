@@ -15,7 +15,9 @@ path = "src/main.rs"
 
 [dependencies]
 wasm-bindgen.workspace = true
-wasm-bindgen-futures.workspace = true
+# `tokio`: the ambient hosted runtime the `#[wasm_bindgen(tokio)]` expansion
+# schedules onto.
+wasm-bindgen-futures = { workspace = true, features = ["tokio"] }
 web-sys = { workspace = true }
 # Reflect, to read the worker `env` bindings (CLOUDFLARE_API_TOKEN etc.) off the
 # JS object the runtime passes to `fetch`.
