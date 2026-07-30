@@ -122,6 +122,9 @@ web-sys = { version = "0.3.98", path = './wasm-bindgen/crates/web-sys' }
 arboard.path = "./arboard"
 fs2.path = "./fs2-rs"
 libc.path = "./libc"
+# mio's emscripten target (epoll fd exposed via `AsRawFd` for tokio's hosted
+# runtime to arm `emscripten_epoll_set_callback` on). Remove once upstream.
+mio = { git = "https://github.com/guybedford/mio", branch = "emscripten" }
 socket2.git = "https://github.com/rust-lang/socket2"
 sys-info.path = "./sys-info"
 ring.path = "./ring"

@@ -8,9 +8,8 @@ on Cloudflare Workers using AI Gateway.
 1. Ensure latest Rust toolchain installed with Emscripten target via [Rustup]:
 
 ```
-rustup install stable
-rustup default stable
-rustup target add wasm32-unknown-emscripten
+rustup install nightly
+rustup target add --toolchain nightly wasm32-unknown-emscripten
 ```
 
 2. Install Emscripten with patches
