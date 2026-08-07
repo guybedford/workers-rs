@@ -13,7 +13,7 @@ import { copyFileSync } from "node:fs";
 const OUT = process.env.EMSCRIPTEN_GOOSE_OUT ??
   "../../target/wasm32-unknown-emscripten/release/emscripten-goose";
 copyFileSync(`${OUT}.js`, `${OUT}.mjs`);
-const { _default: worker } = await import(`${OUT}.mjs`);
+const { default: worker } = await import(`${OUT}.mjs`);
 
 const env = {
   CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID ?? "",
