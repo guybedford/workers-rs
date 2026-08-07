@@ -19,6 +19,6 @@ PATH="$EMSCRIPTEN:$PWD/../../wasm-bindgen/target/debug:$PATH" \
 EM_CONFIG="$EMSDK/.emscripten" \
 EM_LLVM_ROOT="$EMSDK/upstream/bin" \
 LLVM_ROOT="$EMSDK/upstream/bin" \
-EMCC_CFLAGS='-fwasm-exceptions -sDEFAULT_TO_CXX' \
+EMCC_CFLAGS='-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0' \
 cargo build
 '''
