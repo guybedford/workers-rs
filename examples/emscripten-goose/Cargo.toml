@@ -39,9 +39,11 @@ tokio = { version = "1", default-features = false, features = [
 ] }
 libc = "0.2"
 # Bog-standard goose-as-a-library smoke test on wasm32-unknown-emscripten.
-goose = { git = "https://github.com/aaif-goose/goose" }
+# Fork carries the emscripten reqwest client support (async DNS resolver +
+# dev TLS overrides).
+goose = { git = "https://github.com/guybedford/goose", branch = "emscripten" }
 # `ModelConfig` lives here; the `goose` facade no longer re-exports it.
-goose-providers = { git = "https://github.com/aaif-goose/goose" }
+goose-providers = { git = "https://github.com/guybedford/goose", branch = "emscripten" }
 anyhow = "1"
 futures = "0.3"
 # goose pulls sqlx but only turns on its async runtime via its TLS features;

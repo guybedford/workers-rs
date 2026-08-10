@@ -1,7 +1,10 @@
 name = "emscripten-goose"
 main = "../../target/wasm32-unknown-emscripten/debug/deps/emscripten_goose.js"
 compatibility_date = "2026-06-02"
-compatibility_flags = ["nodejs_compat", "new_module_registry", "no_handle_cross_request_promise_resolution"]
+# `tokio = "isolated"` gives each request its own runtime, so no promise is
+# ever settled from another request's context and
+# `no_handle_cross_request_promise_resolution` is not needed.
+compatibility_flags = ["nodejs_compat", "new_module_registry"]
 
 [vars]
 CLOUDFLARE_ACCOUNT_ID = "UPDATE ME"
@@ -10,6 +13,10 @@ OPENAI_MODEL = "workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 # CLOUDFLARE_API_TOKEN is optional (omit for an unauthenticated gateway); for
 # real deployments prefer `wrangler secret put CLOUDFLARE_API_TOKEN`.
 # CLOUDFLARE_API_TOKEN = "UPDATE ME"
+# Local dev behind WARP TLS interception: skip cert verification, or instead
+# trust the Gateway CA via EXTRA_CA_PEM (export with
+# `security find-certificate -a -c Gateway -p`). Remove for deployment.
+# INSECURE_TLS = "1"
 
 [build]
 command = '''

@@ -2139,7 +2139,7 @@ dependencies = [
 [[package]]
 name = "goose"
 version = "1.40.0"
-source = "git+https://github.com/aaif-goose/goose#66ce9a6beb17af6037872e92ab9e0762f91ea7ea"
+source = "git+https://github.com/guybedford/goose?branch=emscripten#fa02a2fcbcb8ca3257084e93a159593cb05e0290"
 dependencies = [
  "agent-client-protocol",
  "agent-client-protocol-http",
@@ -2235,7 +2235,7 @@ dependencies = [
 [[package]]
 name = "goose-acp-macros"
 version = "1.40.0"
-source = "git+https://github.com/aaif-goose/goose#66ce9a6beb17af6037872e92ab9e0762f91ea7ea"
+source = "git+https://github.com/guybedford/goose?branch=emscripten#fa02a2fcbcb8ca3257084e93a159593cb05e0290"
 dependencies = [
  "quote",
  "syn 2.0.118",
@@ -2244,7 +2244,7 @@ dependencies = [
 [[package]]
 name = "goose-providers"
 version = "1.40.0"
-source = "git+https://github.com/aaif-goose/goose#66ce9a6beb17af6037872e92ab9e0762f91ea7ea"
+source = "git+https://github.com/guybedford/goose?branch=emscripten#fa02a2fcbcb8ca3257084e93a159593cb05e0290"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2274,7 +2274,7 @@ dependencies = [
 [[package]]
 name = "goose-sdk-types"
 version = "1.40.0"
-source = "git+https://github.com/aaif-goose/goose#66ce9a6beb17af6037872e92ab9e0762f91ea7ea"
+source = "git+https://github.com/guybedford/goose?branch=emscripten#fa02a2fcbcb8ca3257084e93a159593cb05e0290"
 dependencies = [
  "agent-client-protocol",
  "agent-client-protocol-schema",

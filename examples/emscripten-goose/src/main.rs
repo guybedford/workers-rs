@@ -96,7 +96,7 @@ const LANDING_PAGE: &str = r#"<!doctype html>
 </html>
 "#;
 
-#[wasm_bindgen(tokio, js_namespace = ["default"])]
+#[wasm_bindgen(tokio = "isolated", js_namespace = ["default"])]
 pub async fn fetch(request: Request, env: JsValue, _ctx: JsValue) -> Result<Response, JsValue> {
     std::panic::set_hook(Box::new(|info| {
         web_sys::console::error_1(&format!("RUST PANIC: {info}").into());
@@ -118,6 +118,15 @@ pub async fn fetch(request: Request, env: JsValue, _ctx: JsValue) -> Result<Resp
     let model = env_string(&env, "OPENAI_MODEL").unwrap_or_else(|| DEFAULT_MODEL.into());
     let api_key =
         env_string(&env, "CLOUDFLARE_API_TOKEN").or_else(|| env_string(&env, "OPENAI_API_KEY"));
+
+    // Local-dev TLS overrides for WARP-intercepted egress (Gateway CA):
+    // trust an extra root bundle, or skip verification entirely.
+    if let Some(pem) = env_string(&env, "EXTRA_CA_PEM") {
+        goose::providers::api_client::set_extra_root_ca_pem(pem);
+    }
+    if env_string(&env, "INSECURE_TLS").as_deref() == Some("1") {
+        goose::providers::api_client::set_insecure_tls(true);
+    }
 
     let (status, content_type, body) = match base_url {
         Some(base_url) => match generate_page(&base_url, &model, api_key.as_deref(), &prompt).await {
@@ -158,13 +167,6 @@ async fn generate_page(
     use goose_providers::model::ModelConfig;
 
     ensure_ring_provider();
-
-    // reqwest's `GaiResolver` runs `getaddrinfo` on the blocking pool, which on
-    // emscripten only answers from the resolution cache; tokio's async DNS
-    // populates that cache without blocking the host event loop.
-    if let Some(host) = host_of(base_url) {
-        dns_prewarm(&host).await?;
-    }
 
     // Send a bearer token when one is configured; an unauthenticated gateway
     // needs no auth.
@@ -269,16 +271,6 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// Extract the hostname from `scheme://host[:port]/...` for the DNS prewarm.
-fn host_of(base_url: &str) -> Option<String> {
-    let after_scheme = base_url.split_once("://").map(|(_, r)| r).unwrap_or(base_url);
-    let authority = after_scheme.split(['/', '?', '#']).next().unwrap_or("");
-    let host = authority.rsplit_once('@').map(|(_, h)| h).unwrap_or(authority);
-    // Strip a port; leave IPv6 literals (`[::1]`) alone for the common case.
-    let host = host.split(':').next().unwrap_or(host);
-    (!host.is_empty()).then(|| host.to_string())
-}
-
 /// Install the ring-backed rustls `CryptoProvider` as the process default, once.
 /// reqwest looks this up when building its rustls client; without it the
 /// `rustls-no-provider` build has no crypto and panics.
@@ -288,16 +280,6 @@ fn ensure_ring_provider() {
     ONCE.call_once(|| {
         let _ = rustls::crypto::ring::default_provider().install_default();
     });
-}
-
-/// Prewarm emscripten's resolution cache for `host` via tokio's async DNS
-/// (backed by `emscripten_dns_lookup_async`), so reqwest's subsequent
-/// synchronous `getaddrinfo` resolves from cache.
-async fn dns_prewarm(host: &str) -> Result<(), String> {
-    let _addrs = tokio::net::lookup_host((host, 443))
-        .await
-        .map_err(|e| format!("dns prewarm for {host:?}: {e}"))?;
-    Ok(())
 }
 
 fn err_chain(e: &dyn std::error::Error) -> String {
