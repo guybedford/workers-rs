@@ -1,0 +1,29 @@
+Cargo.lock
+  s_6ad57968e2e6e8::t_a4f76b30a13064 2142,2238,2247,2277
+tokio
+  s_47d04d66729438::t_e51957bfdab2b1 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4d5ea702ea647ea0d3cea1ca7cc9b814e6b17e71",
+  "prompts": {},
+  "sessions": {
+    "s_47d04d66729438": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_0596ffc8dffeC6yRIvupPpozSe",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Guy Bedford <gbedford@cloudflare.com>"
+    },
+    "s_6ad57968e2e6e8": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_fc62dfbb5ffe6zTFpw3jraSM28",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Guy Bedford <gbedford@cloudflare.com>"
+    }
+  }
+}
